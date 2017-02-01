@@ -67,26 +67,29 @@ func main() {
 	}
 
 	var sem = make(chan int, maxWorkers)
+	var urlChan = make(chan Url, maxWorkers)
 
 	for {
-		time.Sleep(10 * time.Millisecond)
+		// get an url
+		var url Url
+		err := db.Where(&Url{Status: 1}).Where("depth <= ?", maxUrlDepth).Order("rnd").First(&url).Error
+		if err != nil {
+			fmt.Printf("DB get url error: %v\n", err)
+			os.Exit(6)
+		}
+		// set status
+		db.Model(&url).Updates(Url{Status: 2})
+
 		// Block until there's capacity to process a request.
 		sem <- 1
+		urlChan <- url
 		// Don't wait for handle to finish.
-		go process(sem, db, client)
+		go process(sem, urlChan, db, client)
 	}
 }
 
-func process(sem chan int, db *gorm.DB, client http.Client) {
-	// get an url
-	var url Url
-	err := db.Where(&Url{Status: 1}).Where("depth <= ?", maxUrlDepth).Order("rnd").First(&url).Error
-	if err != nil {
-		fmt.Printf("DB get url error: %v\n", err)
-		os.Exit(6)
-	}
-	// set status
-	db.Model(&url).Updates(Url{Status: 2})
+func process(sem chan int, urlChan chan Url, db *gorm.DB, client http.Client) {
+	url := <- urlChan
 	// get html code
 	resp, err := client.Get(url.Address)
 	if err != nil {
