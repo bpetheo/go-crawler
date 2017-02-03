@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"io/ioutil"
 	"time"
-	"math/rand"
+	"crypto/sha1"
 )
 
 const (
@@ -18,7 +18,19 @@ const (
 	maxUrlDepth = 0
 )
 
-//var urls = []string {"http://mito.hu"}
+var seedUrls = []string {
+	"http://mito.hu",
+	"https://vimeo.com",
+	"http://mupa.hu",
+	"http://startlap.hu",
+	"http://www.pinterest.com",
+	"http://instagram.com",
+	"http://www.youtube.com",
+	"https://twitter.com",
+	"http://index.hu",
+	"http://origo.hu",
+	"http://mek.oszk.hu",
+}
 
 //var dbSettings = mysql.ConnectionURL{
 //    Host:     "localhost:17008",
@@ -38,9 +50,9 @@ const (
 type Url struct {
 	gorm.Model
 	Address string `gorm:"type:text"`
-	Status int
-	Depth int
-	Rnd float64
+	Status int `gorm:"index"`
+	Depth int `gorm:"index"`
+	Hash string `gorm:"type:binary(20);index;unique"`
 }
 
 type Relation struct {
@@ -72,7 +84,7 @@ func main() {
 	for {
 		// get an url
 		var url Url
-		err := db.Where(&Url{Status: 1}).Where("depth <= ?", maxUrlDepth).Order("rnd").First(&url).Error
+		err := db.Where(&Url{Status: 1}).Where("depth <= ?", maxUrlDepth).Order("hash").First(&url).Error
 		if err != nil {
 			fmt.Printf("DB get url error: %v\n", err)
 			os.Exit(6)
@@ -127,28 +139,19 @@ func resetDB(db *gorm.DB) {
 	db.AutoMigrate(&Url{})
 	db.AutoMigrate(&Relation{})
 
-	// Add unique index
-	db.Model(&Url{}).AddUniqueIndex("uqidx_adress", "address")
-
 	// Add seed address(es)
-	db.Create(&Url{Address: "http://mito.hu", Status: 1})
-	db.Create(&Url{Address: "https://vimeo.com", Status: 1})
-	db.Create(&Url{Address: "http://mupa.hu", Status: 1})
-	db.Create(&Url{Address: "http://www.pinterest.com", Status: 1})
-	db.Create(&Url{Address: "http://instagram.com", Status: 1})
-	db.Create(&Url{Address: "http://www.youtube.com", Status: 1})
-	db.Create(&Url{Address: "https://twitter.com", Status: 1})
-	db.Create(&Url{Address: "http://index.hu", Status: 1})
-	db.Create(&Url{Address: "http://origo.hu", Status: 1})
-	db.Create(&Url{Address: "http://mek.oszk.hu", Status: 1})
-
+	for _, address := range seedUrls {
+		hash := sha1.Sum([]byte(address))
+		db.Create(&Url{Address: address, Hash:string(hash[:]), Status: 1})
+	}
 }
 
 func saveLinks(db *gorm.DB, addresses []string, parentID uint) {
 	for _, address := range addresses {
 		// select if this address already exists in the db, insert if it's not
 		var url Url
-		db.Where(Url{Address: address}).Attrs(Url{Status: 1, Depth:urlDepth(address), Rnd:rand.Float64()}).FirstOrCreate(&url)
+		hash := sha1.Sum([]byte(address))
+		db.Where(Url{Hash:string(hash[:])}).Attrs(Url{Address: address, Status: 1, Depth:urlDepth(address)}).FirstOrCreate(&url)
 
 		// add relation in both cases
 		err := db.Create(&Relation{AddressID: url.ID, ParentID: parentID}).Error
