@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/mysql"
+	_ "github.com/jinzhu/gorm/dialects/postgres"
 	"regexp"
 	"strings"
 	"os"
@@ -23,7 +23,7 @@ type Url struct {
 	Address string `gorm:"type:text"`
 	Status int `gorm:"index"`
 	Depth int `gorm:"index"`
-	Hash string `gorm:"type:binary(20);index;unique"`
+	Hash string `gorm:"type:bytea;index;unique"`
 }
 
 type Relation struct {
@@ -33,7 +33,7 @@ type Relation struct {
 }
 
 func main() {
-	db, err := gorm.Open("mysql", "dev:devpass@(localhost:17008)/database?charset=utf8&parseTime=True&loc=Local")
+	db, err := gorm.Open("postgres", "host=localhost port=17008 user=dev dbname=database sslmode=disable password=devpass")
 	if err != nil {
 		panic("failed to connect database")
 	}
