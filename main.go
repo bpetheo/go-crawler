@@ -188,10 +188,9 @@ func parseLinks(html []byte, origin string) []string {
 
 func urlDepth(url string) int {
 	// remove http(s):// and trailing / if any
-	baseUrl := strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(url, "https://"), "http://"), "/")
-	// count remaining "/" characters
-	//fmt.Printf("base: %s, depth: %v\n", baseUrl, strings.Count(baseUrl, "/"))
-	return strings.Count(baseUrl, "/")
+	baseUrl := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(url, "https://"), "http://"), "www.")
+	// count remaining "/" and "." characters
+	return strings.Count(baseUrl, "/") + (strings.Count(baseUrl, ".") - 1)
 }
 
 func uniqueUrl(url string, parsedUrls []string, origin string) bool {
