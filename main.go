@@ -230,6 +230,9 @@ func trimStringFromHashMark(s string) string {
 }
 
 func removeDuplicateDash(s string) string {
+	if len(s) < 9 {
+		return strings.Replace(s, "//", "/", -1)
+	}
 	tmp := s[8:]
 	tmp = strings.Replace(tmp, "//", "/", -1)
 	return s[:8] + tmp
