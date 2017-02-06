@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"os"
@@ -75,8 +75,8 @@ func main() {
 		url := Url{}
 		err = c.Find(bson.M{"status": 1, "depth": maxUrlDepth}).Sort("hash").One(&url)
 		if err != nil {
-			fmt.Printf("DB get url error: %v\n", err)
-			fmt.Printf("Not enough urls for all threads, waiting for more...\n")
+			log.Printf("DB get url error: %v\n", err)
+			log.Printf("Not enough urls for all threads, waiting for more...\n")
 			time.Sleep(1 * time.Second)
 			continue
 		}
@@ -84,7 +84,7 @@ func main() {
 		// set status
 		err = c.Update(bson.M{"hash": url.Hash}, bson.M{"$set": bson.M{"status": 2}})
 		if err != nil {
-			fmt.Printf("DB update status error: %v\n", err)
+			log.Printf("DB update status error: %v\n", err)
 			os.Exit(7)
 		}
 
@@ -114,7 +114,7 @@ func process(sem chan int, urlChan chan Url, db *mgo.Session, client http.Client
 	// get html code
 	resp, err := client.Get(url.Address)
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
+		log.Printf("Error: %v\n", err)
 		c.Update(bson.M{"_id": url.ID}, bson.M{"$set": bson.M{"status": -1}})
 		<-sem      // Done; enable next request to run.
 		return
@@ -124,14 +124,14 @@ func process(sem chan int, urlChan chan Url, db *mgo.Session, client http.Client
 	html, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
+		log.Printf("Error: %v\n", err)
 		c.Update(bson.M{"_id": url.ID}, bson.M{"$set": bson.M{"status": -1}})
 		<-sem      // Done; enable next request to run.
 		return
 	}
 
 	// print html
-	//fmt.Printf("%s\n", html)
+	//log.Printf("%s\n", html)
 
 	p_start := time.Now()
 	// get urls-from html code
@@ -142,7 +142,7 @@ func process(sem chan int, urlChan chan Url, db *mgo.Session, client http.Client
 	saveLinks(c, rc, newUrls, url.ID)
 
 	// print some stats
-	fmt.Printf("Processed %s: found %d new urls in %s [i: %s, f: %s, p: %s, s: %s]\n", url.Address, len(newUrls), time.Since(start), f_start.Sub(start), p_start.Sub(f_start), s_start.Sub(p_start), time.Since(s_start))
+	log.Printf("Processed %s: found %d new urls in %s [i: %s, f: %s, p: %s, s: %s]\n", url.Address, len(newUrls), time.Since(start), f_start.Sub(start), p_start.Sub(f_start), s_start.Sub(p_start), time.Since(s_start))
 
 	// Done; enable next request to run.
 	<-sem
@@ -172,7 +172,7 @@ func resetDB(dbsession *mgo.Session) {
 		hash := sha1.Sum([]byte(address))
 		err := c.Insert(&Url{Address: address, Hash:string(hash[:]), Status: 1})
 		if err != nil {
-			fmt.Printf("DB Init Insert error: %v\n", err)
+			log.Printf("DB Init Insert error: %v\n", err)
 		}
 	}
 }
@@ -191,11 +191,11 @@ func saveLinks(c *mgo.Collection, rc *mgo.Collection, addresses []string, parent
 		url = Url{}
 		err := c.Find(bson.M{"hash": hash_str}).One(&url)
 		if err != nil {
-			fmt.Printf("DB relation url lookup error: %v\n", err)
+			log.Printf("DB relation url lookup error: %v\n", err)
 		}
 		err = rc.Insert(&Relation{AddressID: url.ID, ParentID: parentID})
 		if err != nil {
-			fmt.Printf("DB Relation Insert error: %v\n", err)
+			log.Printf("DB Relation Insert error: %v\n", err)
 		}
 	}
 }
@@ -233,7 +233,7 @@ func parseLinks(html []byte, origin string) []string {
 	}
 
 	//for _, pu := range parsedUrls {
-	//	fmt.Println(pu)
+	//	log.Println(pu)
 	//}
 	return parsedUrls
 }
