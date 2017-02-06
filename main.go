@@ -185,6 +185,9 @@ func parseLinks(html []byte, origin string) []string {
 		// remove "#" if present and everything after that
 		fullUrl = trimStringFromHashMark(fullUrl)
 
+		// remove trailing dash
+		fullUrl = removeTrailingDash(fullUrl)
+
 		// csak duplikátumok szűrése
 		if uniqueUrl(fullUrl, parsedUrls, origin) {
 			parsedUrls = append(parsedUrls, fullUrl)
@@ -230,4 +233,8 @@ func removeDuplicateDash(s string) string {
 	tmp := s[8:]
 	tmp = strings.Replace(tmp, "//", "/", -1)
 	return s[:8] + tmp
+}
+
+func removeTrailingDash(s string) string {
+	return strings.TrimSuffix(s, "/")
 }
