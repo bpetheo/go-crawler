@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/mysql"
 	"regexp"
 	"strings"
 	"os"
@@ -11,38 +9,58 @@ import (
 	"io/ioutil"
 	"time"
 	"crypto/sha1"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 const (
-	maxWorkers = 50
+	maxWorkers = 200
 	maxUrlDepth = 0
 )
 
 type Url struct {
-	gorm.Model
-	Address string `gorm:"type:text"`
-	Status int `gorm:"index"`
-	Depth int `gorm:"index"`
-	Hash string `gorm:"type:binary(20);index;unique"`
+	ID bson.ObjectId `bson:"_id,omitempty"`
+	Address string
+	Status int
+	Depth int
+	Hash string
 }
 
 type Relation struct {
-	gorm.Model
-	AddressID uint
-	ParentID uint
+	ID bson.ObjectId `bson:"_id,omitempty"`
+	AddressID bson.ObjectId
+	ParentID bson.ObjectId
 }
 
 func main() {
-	db, err := gorm.Open("mysql", "dev:devpass@(localhost:17008)/database?charset=utf8&parseTime=True&loc=Local")
+	dbsession, err := mgo.Dial("localhost:17008")
 	if err != nil {
-		panic("failed to connect database")
+		panic(err)
 	}
-	defer db.Close()
+	defer dbsession.Close()
 
-	// DB debug mode
-	// db.LogMode(true)
+	c := dbsession.DB("database").C("url")
 
-	// resetDB(db)
+	resetDB(dbsession)
+	//os.Exit(255)
+
+	// set indices
+	index := mgo.Index{
+		Key: []string{"hash"},
+		Unique: true,
+	}
+	err = c.EnsureIndex(index)
+	if err != nil {
+		panic(err)
+	}
+	index2 := mgo.Index{
+		Key: []string{"status", "depth", "hash"},
+		Unique: true,
+	}
+	err = c.EnsureIndex(index2)
+	if err != nil {
+		panic(err)
+	}
 
 	timeout := time.Duration(5 * time.Second)
 	client := http.Client {
@@ -54,62 +72,75 @@ func main() {
 
 	for {
 		// get an url
-		var url Url
-		err := db.Where(&Url{Status: 1}).Where("depth <= ?", maxUrlDepth).Order("hash").First(&url).Error
+		url := Url{}
+		err = c.Find(bson.M{"status": 1, "depth": maxUrlDepth}).Sort("hash").One(&url)
 		if err != nil {
 			fmt.Printf("DB get url error: %v\n", err)
-			os.Exit(6)
+			fmt.Printf("Not enough urls for all threads, waiting for more...\n")
+			time.Sleep(1 * time.Second)
+			continue
 		}
+
 		// set status
-		db.Model(&url).Updates(Url{Status: 2})
+		err = c.Update(bson.M{"hash": url.Hash}, bson.M{"$set": bson.M{"status": 2}})
+		if err != nil {
+			fmt.Printf("DB update status error: %v\n", err)
+			os.Exit(7)
+		}
 
 		// Block until there's capacity to process a request.
 		sem <- 1
 		urlChan <- url
 		// Don't wait for handle to finish.
-		go process(sem, urlChan, db, client)
+		go process(sem, urlChan, dbsession, client)
 	}
 }
 
-func process(sem chan int, urlChan chan Url, db *gorm.DB, client http.Client) {
+func process(sem chan int, urlChan chan Url, db *mgo.Session, client http.Client) {
+	// start new db session for mongo
+	dbsession := db.Copy()
+	defer dbsession.Close()
+
+	// collections
+	c := dbsession.DB("database").C("url")
+	rc := dbsession.DB("database").C("relation")
+
+	// get url from channel
 	url := <- urlChan
+
 	// get html code
 	resp, err := client.Get(url.Address)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
-		db.Model(&url).Updates(Url{Status: -1})
+		c.Update(bson.M{"_id": url.ID}, bson.M{"$set": bson.M{"status": -1}})
 		<-sem      // Done; enable next request to run.
 		return
 	}
-	// reads html as a slice of bytes
+
+	// read html as a slice of bytes
 	html, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
-		db.Model(&url).Updates(Url{Status: -1})
+		c.Update(bson.M{"_id": url.ID}, bson.M{"$set": bson.M{"status": -1}})
 		<-sem      // Done; enable next request to run.
 		return
 	}
+
 	// print html
 	//fmt.Printf("%s\n", html)
+
 	// get urls-from html code
 	newUrls := parseLinks(html, url.Address)
+
 	// save url-s
-	saveLinks(db, newUrls, url.ID)
+	saveLinks(c, rc, newUrls, url.ID)
 
 	// Done; enable next request to run.
 	<-sem
 }
 
-func resetDB(db *gorm.DB) {
-	// Drop model tables
-	db.DropTableIfExists(&Url{})
-	db.DropTableIfExists(&Relation{})
-
-	// Migrate the schemas
-	db.AutoMigrate(&Url{})
-	db.AutoMigrate(&Relation{})
-
+func resetDB(dbsession *mgo.Session) {
 	var seedUrls = []string {
 		"http://mito.hu",
 		"https://vimeo.com",
@@ -124,24 +155,39 @@ func resetDB(db *gorm.DB) {
 		"http://mek.oszk.hu",
 	}
 
+	// drop db
+	dbsession.DB("database").DropDatabase()
+
 	// Add seed address(es)
+	c := dbsession.DB("database").C("url")
 	for _, address := range seedUrls {
 		hash := sha1.Sum([]byte(address))
-		db.Create(&Url{Address: address, Hash:string(hash[:]), Status: 1})
+		err := c.Insert(&Url{Address: address, Hash:string(hash[:]), Status: 1})
+		if err != nil {
+			fmt.Printf("DB Init Insert error: %v\n", err)
+		}
 	}
 }
 
-func saveLinks(db *gorm.DB, addresses []string, parentID uint) {
+func saveLinks(c *mgo.Collection, rc *mgo.Collection, addresses []string, parentID bson.ObjectId) {
 	for _, address := range addresses {
-		// select if this address already exists in the db, insert if it's not
-		var url Url
+		// calculate address hash
 		hash := sha1.Sum([]byte(address))
-		db.Where(Url{Hash:string(hash[:])}).Attrs(Url{Address: address, Status: 1, Depth:urlDepth(address)}).FirstOrCreate(&url)
+		hash_str := string(hash[:])
 
-		// add relation in both cases
-		err := db.Create(&Relation{AddressID: url.ID, ParentID: parentID}).Error
+		// add url to the collection
+		url := Url{Address: address, Status: 1, Depth: urlDepth(address), Hash: hash_str}
+		c.Insert(url)
+
+		// add relation to the collection
+		url = Url{}
+		err := c.Find(bson.M{"hash": hash_str}).One(&url)
 		if err != nil {
-			fmt.Printf("DB Insert error: %v\n", err)
+			fmt.Printf("DB relation url lookup error: %v\n", err)
+		}
+		err = rc.Insert(&Relation{AddressID: url.ID, ParentID: parentID})
+		if err != nil {
+			fmt.Printf("DB Relation Insert error: %v\n", err)
 		}
 	}
 }

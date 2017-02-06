@@ -1,22 +1,17 @@
 version: '2'
 services:
     db:
-        image: mariadb:10
-        command: [--character-set-server=utf8, --collation-server=utf8_unicode_ci]
+        image: mongo:3.4
         ports:
-            - 3306
-        environment:
-            MYSQL_DATABASE: database
-            MYSQL_USER: dev
-            MYSQL_PASSWORD: devpass
-            MYSQL_ROOT_PASSWORD: password
+            - 27017
         volumes:
-            - dbdata:/var/lib/mysql
-    pma:
-        image: phpmyadmin/phpmyadmin
+#            - dbdata:/data/db
+            - /tmp/mongo:/data/db
+    dba:
+        image: mongoclient/mongoclient:1.5.0
         ports:
-            - 80
+            - 3000
         depends_on:
             - db
-volumes:
-    dbdata: {}
+#volumes:
+#    dbdata: {}

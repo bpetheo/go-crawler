@@ -2,7 +2,7 @@ version: '2'
 services:
     db:
         ports:
-            - 17008:3306
-    pma:
+            - 17008:27017
+    dba:
         ports:
-            - 17009:80
+            - 17009:3000
