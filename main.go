@@ -32,21 +32,6 @@ var seedUrls = []string {
 	"http://mek.oszk.hu",
 }
 
-//var dbSettings = mysql.ConnectionURL{
-//    Host:     "localhost:17008",
-//    Database: "database",
-//    User:     "dev",
-//    Password: "devpass",
-//}
-
-// url records per domain
-//SELECT count(id) as count,
-//SUBSTRING_INDEX(REPLACE(REPLACE(address,'http://',''),'https://',''),'/',1) as domain
-//FROM urls
-//WHERE status = 1
-//GROUP BY domain
-//ORDER BY count ASC
-
 type Url struct {
 	gorm.Model
 	Address string `gorm:"type:text"`
