@@ -18,20 +18,6 @@ const (
 	maxUrlDepth = 0
 )
 
-var seedUrls = []string {
-	"http://mito.hu",
-	"https://vimeo.com",
-	"http://mupa.hu",
-	"http://startlap.hu",
-	"http://www.pinterest.com",
-	"http://instagram.com",
-	"http://www.youtube.com",
-	"https://twitter.com",
-	"http://index.hu",
-	"http://origo.hu",
-	"http://mek.oszk.hu",
-}
-
 type Url struct {
 	gorm.Model
 	Address string `gorm:"type:text"`
@@ -123,6 +109,20 @@ func resetDB(db *gorm.DB) {
 	// Migrate the schemas
 	db.AutoMigrate(&Url{})
 	db.AutoMigrate(&Relation{})
+
+	var seedUrls = []string {
+		"http://mito.hu",
+		"https://vimeo.com",
+		"http://mupa.hu",
+		"http://startlap.hu",
+		"http://www.pinterest.com",
+		"http://instagram.com",
+		"http://www.youtube.com",
+		"https://twitter.com",
+		"http://index.hu",
+		"http://origo.hu",
+		"http://mek.oszk.hu",
+	}
 
 	// Add seed address(es)
 	for _, address := range seedUrls {
