@@ -97,6 +97,8 @@ func main() {
 }
 
 func process(sem chan int, urlChan chan Url, db *mgo.Session, client http.Client) {
+	start := time.Now()
+
 	// start new db session for mongo
 	dbsession := db.Copy()
 	defer dbsession.Close()
@@ -108,6 +110,7 @@ func process(sem chan int, urlChan chan Url, db *mgo.Session, client http.Client
 	// get url from channel
 	url := <- urlChan
 
+	f_start := time.Now()
 	// get html code
 	resp, err := client.Get(url.Address)
 	if err != nil {
@@ -130,11 +133,16 @@ func process(sem chan int, urlChan chan Url, db *mgo.Session, client http.Client
 	// print html
 	//fmt.Printf("%s\n", html)
 
+	p_start := time.Now()
 	// get urls-from html code
 	newUrls := parseLinks(html, url.Address)
 
+	s_start := time.Now()
 	// save url-s
 	saveLinks(c, rc, newUrls, url.ID)
+
+	// print some stats
+	fmt.Printf("Processed %s: found %d new urls in %s [i: %s, f: %s, p: %s, s: %s]\n", url.Address, len(newUrls), time.Since(start), f_start.Sub(start), p_start.Sub(f_start), s_start.Sub(p_start), time.Since(s_start))
 
 	// Done; enable next request to run.
 	<-sem
@@ -223,8 +231,6 @@ func parseLinks(html []byte, origin string) []string {
 			parsedUrls = append(parsedUrls, fullUrl)
 		}
 	}
-
-	fmt.Printf("%s: %d new\n", origin, len(parsedUrls))
 
 	//for _, pu := range parsedUrls {
 	//	fmt.Println(pu)
