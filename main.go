@@ -148,7 +148,6 @@ func saveLinks(db *gorm.DB, addresses []string, parentID uint) {
 
 func parseLinks(html []byte, origin string) []string {
 	var parsedUrls = []string{}
-	fmt.Printf("Processing: %s\n", origin)
 	rx, _ := regexp.Compile("<a href=\"([htps:]*/[[:alnum:]_.~!*'();:@&=+$,/?#%-+]{2,})\"")
 	res := rx.FindAllStringSubmatch(string(html), -1)
 	for _, r := range res {
@@ -178,6 +177,8 @@ func parseLinks(html []byte, origin string) []string {
 			parsedUrls = append(parsedUrls, fullUrl)
 		}
 	}
+
+	fmt.Printf("%s: %d new\n", origin, len(parsedUrls))
 
 	//for _, pu := range parsedUrls {
 	//	fmt.Println(pu)
