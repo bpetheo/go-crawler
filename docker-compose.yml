@@ -5,13 +5,13 @@ services:
         ports:
             - 27017
         volumes:
-#            - dbdata:/data/db
-            - /tmp/mongo:/data/db
+            - dbdata:/data/db
+#            - /tmp/mongo:/data/db
     dba:
         image: mongoclient/mongoclient:1.5.0
         ports:
             - 3000
         depends_on:
             - db
-#volumes:
-#    dbdata: {}
+volumes:
+    dbdata: {}
