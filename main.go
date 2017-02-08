@@ -24,12 +24,8 @@ type Url struct {
 	Status int
 	Depth int
 	Hash string
-}
-
-type Relation struct {
-	ID bson.ObjectId `bson:"_id,omitempty"`
-	AddressID bson.ObjectId
-	ParentID bson.ObjectId
+	LinksTo []bson.ObjectId
+	LinkedBy []bson.ObjectId
 }
 
 func main() {
@@ -76,7 +72,7 @@ func main() {
 		err = c.Find(bson.M{"status": 1, "depth": maxUrlDepth}).Sort("hash").One(&url)
 		if err != nil {
 			log.Printf("DB get url error: %v\n", err)
-			log.Printf("Not enough urls for all threads, waiting for more...\n")
+			log.Println("Not enough urls for all threads, waiting for more...")
 			time.Sleep(1 * time.Second)
 			continue
 		}
@@ -103,9 +99,8 @@ func process(sem chan int, urlChan chan Url, db *mgo.Session, client http.Client
 	dbsession := db.Copy()
 	defer dbsession.Close()
 
-	// collections
+	// collection
 	c := dbsession.DB("database").C("url")
-	rc := dbsession.DB("database").C("relation")
 
 	// get url from channel
 	url := <- urlChan
@@ -139,7 +134,7 @@ func process(sem chan int, urlChan chan Url, db *mgo.Session, client http.Client
 
 	s_start := time.Now()
 	// save url-s
-	saveLinks(c, rc, newUrls, url.ID)
+	saveLinks(c, newUrls, url.ID)
 
 	// print some stats
 	log.Printf("Processed %s: found %d new urls in %s [i: %s, f: %s, p: %s, s: %s]\n", url.Address, len(newUrls), time.Since(start), f_start.Sub(start), p_start.Sub(f_start), s_start.Sub(p_start), time.Since(s_start))
@@ -177,7 +172,7 @@ func resetDB(dbsession *mgo.Session) {
 	}
 }
 
-func saveLinks(c *mgo.Collection, rc *mgo.Collection, addresses []string, parentID bson.ObjectId) {
+func saveLinks(c *mgo.Collection, addresses []string, parentID bson.ObjectId) {
 	for _, address := range addresses {
 		// calculate address hash
 		hash := sha1.Sum([]byte(address))
@@ -187,15 +182,24 @@ func saveLinks(c *mgo.Collection, rc *mgo.Collection, addresses []string, parent
 		url := Url{Address: address, Status: 1, Depth: urlDepth(address), Hash: hash_str}
 		c.Insert(url)
 
-		// add relation to the collection
-		url = Url{}
-		err := c.Find(bson.M{"hash": hash_str}).One(&url)
+		// get child url
+		childUrl := Url{}
+		err := c.Find(bson.M{"hash": hash_str}).One(&childUrl)
 		if err != nil {
-			log.Printf("DB relation url lookup error: %v\n", err)
+			log.Printf("DB child url lookup by hash error: %v\n", err)
 		}
-		err = rc.Insert(&Relation{AddressID: url.ID, ParentID: parentID})
+
+		// add relation to the parent
+		change := bson.M{"$push":bson.M{"linksto": childUrl.ID}}
+		err = c.Update(bson.M{"_id": parentID}, change)
 		if err != nil {
-			log.Printf("DB Relation Insert error: %v\n", err)
+			log.Printf("DB parent relation url update error: %v\n", err)
+		}
+
+		// add relation to the child
+		err = c.Update(bson.M{"_id": childUrl.ID}, bson.M{"$push":bson.M{"linkedby": parentID}})
+		if err != nil {
+			log.Printf("DB child relation url update error: %v\n", err)
 		}
 	}
 }
