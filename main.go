@@ -44,20 +44,20 @@ func main() {
 	resetDB(dbsession)
 	//os.Exit(255)
 
-	// set indices
-	index := mgo.Index{
+	// set indexes
+	idx_hash := mgo.Index{
 		Key: []string{"hash"},
 		Unique: true,
+		DropDups: true,
 	}
-	err = c.EnsureIndex(index)
+	err = c.EnsureIndex(idx_hash)
 	if err != nil {
 		panic(err)
 	}
-	index2 := mgo.Index{
+	idx_status_depth_hash := mgo.Index{
 		Key: []string{"status", "depth", "hash"},
-		Unique: true,
 	}
-	err = c.EnsureIndex(index2)
+	err = c.EnsureIndex(idx_status_depth_hash)
 	if err != nil {
 		panic(err)
 	}
