@@ -21,6 +21,8 @@ const (
 type Url struct {
 	ID bson.ObjectId `bson:"_id,omitempty"`
 	Address string
+	Domain string
+	TLD string
 	Status int
 	Depth int
 	Hash string
@@ -164,8 +166,9 @@ func resetDB(dbsession *mgo.Session) {
 	// Add seed address(es)
 	c := dbsession.DB("database").C("url")
 	for _, address := range seedUrls {
+		domain, TLD := getDomains(address)
 		hash := sha1.Sum([]byte(address))
-		err := c.Insert(&Url{Address: address, Hash:string(hash[:]), Status: 1})
+		err := c.Insert(&Url{Address: address, Domain:domain, TLD: TLD, Hash:string(hash[:]), Status: 1})
 		if err != nil {
 			log.Printf("DB Init Insert error: %v\n", err)
 		}
@@ -174,12 +177,14 @@ func resetDB(dbsession *mgo.Session) {
 
 func saveLinks(c *mgo.Collection, addresses []string, parentID bson.ObjectId) {
 	for _, address := range addresses {
+		domain, TLD := getDomains(address)
+
 		// calculate address hash
 		hash := sha1.Sum([]byte(address))
 		hash_str := string(hash[:])
 
 		// add url to the collection
-		url := Url{Address: address, Status: 1, Depth: urlDepth(address), Hash: hash_str}
+		url := Url{Address: address, Domain: domain, TLD: TLD, Status: 1, Depth: urlDepth(address), Hash: hash_str}
 		c.Insert(url)
 
 		// get child url
@@ -231,7 +236,7 @@ func parseLinks(html []byte, origin string) []string {
 		fullUrl = removeTrailingDash(fullUrl)
 
 		// csak duplikátumok szűrése
-		if uniqueUrl(fullUrl, parsedUrls, origin) {
+		if uniqueUrl(fullUrl, parsedUrls, origin) && len(fullUrl) > 0 {
 			parsedUrls = append(parsedUrls, fullUrl)
 		}
 	}
@@ -242,9 +247,15 @@ func parseLinks(html []byte, origin string) []string {
 	return parsedUrls
 }
 
+func baseUrl(url string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(url, "https://"), "http://"), "www.")
+}
+
 func urlDepth(url string) int {
-	// remove http(s):// and trailing / if any
-	baseUrl := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(url, "https://"), "http://"), "www.")
+	// remove http(s):// and www prefix if any
+	baseUrl := baseUrl(url)
+	// remove trailing dash
+	baseUrl = removeTrailingDash(baseUrl)
 	// count remaining "/" and "." characters
 	return strings.Count(baseUrl, "/") + (strings.Count(baseUrl, ".") - 1)
 }
@@ -268,6 +279,22 @@ func trimStringFromHashMark(s string) string {
 		return s[:idx]
 	}
 	return s
+}
+
+func getDomains(url string) (domain string, TLD string) {
+	// remove http(s):// and www prefix if any
+	baseUrl := baseUrl(url)
+	// remove everything from the first dash
+	if idx := strings.Index(baseUrl, "/"); idx != -1 {
+		baseUrl = baseUrl[:idx]
+	}
+	rx, _ := regexp.Compile("([[:alnum:]]+[.]([[:alpha:]]+)[?]?.*$)")
+	res := rx.FindStringSubmatch(string(baseUrl))
+	if len(res) != 3 {
+		log.Printf("Cannot parse url: %v %v\n", url, res)
+		return "", ""
+	}
+	return res[1], res[2]
 }
 
 func removeDuplicateDash(s string) string {
