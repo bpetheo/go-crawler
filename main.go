@@ -71,7 +71,7 @@ func main() {
 	var urlChan = make(chan Url, maxWorkers)
 
 	for {
-		// get an url
+		// get a random url
 		url := Url{}
 		err = c.Find(bson.M{"status": 1, "depth": maxUrlDepth}).Sort("hash").One(&url)
 		if err != nil {
