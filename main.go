@@ -23,6 +23,7 @@ type Url struct {
 	Address string
 	Domain string
 	TLD string
+	Email []string
 	Status int
 	Depth int
 	Hash string
@@ -133,10 +134,12 @@ func process(sem chan int, urlChan chan Url, db *mgo.Session, client http.Client
 	p_start := time.Now()
 	// get urls-from html code
 	newUrls := parseLinks(html, url.Address)
+	// get email addresses from html code
+	newEmails := parseEmails(html)
 
 	s_start := time.Now()
 	// save url-s
-	saveLinks(c, newUrls, url.ID)
+	saveLinks(c, newUrls, newEmails, url.ID)
 
 	// print some stats
 	log.Printf("Processed %s: found %d new urls in %s [i: %s, f: %s, p: %s, s: %s]\n", url.Address, len(newUrls), time.Since(start), f_start.Sub(start), p_start.Sub(f_start), s_start.Sub(p_start), time.Since(s_start))
@@ -175,7 +178,7 @@ func resetDB(dbsession *mgo.Session) {
 	}
 }
 
-func saveLinks(c *mgo.Collection, addresses []string, parentID bson.ObjectId) {
+func saveLinks(c *mgo.Collection, addresses []string, newEmails []string, parentID bson.ObjectId) {
 	for _, address := range addresses {
 		domain, TLD := getDomains(address)
 
@@ -184,7 +187,7 @@ func saveLinks(c *mgo.Collection, addresses []string, parentID bson.ObjectId) {
 		hash_str := string(hash[:])
 
 		// add url to the collection
-		url := Url{Address: address, Domain: domain, TLD: TLD, Status: 1, Depth: urlDepth(address), Hash: hash_str}
+		url := Url{Address: address, Domain: domain, TLD: TLD, Email: newEmails, Status: 1, Depth: urlDepth(address), Hash: hash_str}
 		c.Insert(url)
 
 		// get child url
@@ -248,6 +251,27 @@ func parseLinks(html []byte, origin string) []string {
 	//	log.Println(pu)
 	//}
 	return parsedUrls
+}
+
+func parseEmails(html []byte) []string {
+	var parsedEmails = []string{}
+	rx, _ := regexp.Compile("<a href=\"mailto:([a-z0-9._%+-]+@[a-z0-9.-]+[.][a-z]{2,4})\"")
+	res := rx.FindAllStringSubmatch(string(html), -1)
+	for _, r := range res {
+		// # és / hivatkozások szűrése
+		if len(r) <= 1 {
+			continue
+		}
+
+		email := strings.TrimSpace(r[1])
+
+		// csak duplikátumok szűrése
+		if uniqueUrl(email, parsedEmails, "") && len(email) > 0 {
+			parsedEmails = append(parsedEmails, email)
+		}
+	}
+
+	return parsedEmails
 }
 
 func baseUrl(url string) string {
