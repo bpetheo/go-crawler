@@ -53,7 +53,7 @@ func main() {
 		panic(err)
 	}
 	idx_status_depth_hash := mgo.Index{
-		Key: []string{"status", "depth", "hash"},
+		Key: []string{"status", "depth", "tld", "hash"},
 	}
 	err = c.EnsureIndex(idx_status_depth_hash)
 	if err != nil {
@@ -71,7 +71,7 @@ func main() {
 	for {
 		// get a random url
 		url := Url{}
-		err = c.Find(bson.M{"status": 1, "depth": maxUrlDepth}).Sort("hash").One(&url)
+		err = c.Find(bson.M{"status": 1, "depth": maxUrlDepth, "tld": "hu"}).Sort("hash").One(&url)
 		if err != nil {
 			log.Printf("DB get url error: %v\n", err)
 			log.Println("Not enough urls for all threads, waiting for more...")
@@ -226,6 +226,9 @@ func parseLinks(html []byte, origin string) []string {
 		} else {
 			fullUrl = strings.TrimSpace(r[1])
 		}
+		// trim parameters
+		fullUrl = trimParams(fullUrl)
+
 		// replace "//" strings to "/" except for the protocol
 		fullUrl = removeDuplicateDash(fullUrl)
 
@@ -276,6 +279,13 @@ func uniqueUrl(url string, parsedUrls []string, origin string) bool {
 
 func trimStringFromHashMark(s string) string {
 	if idx := strings.Index(s, "#"); idx != -1 {
+		return s[:idx]
+	}
+	return s
+}
+
+func trimParams(s string) string {
+	if idx := strings.Index(s, "?"); idx != -1 {
 		return s[:idx]
 	}
 	return s
