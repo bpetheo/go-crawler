@@ -148,13 +148,13 @@ func process(sem chan int, urlChan chan Url, db *mgo.Session, client http.Client
 func resetDB(dbsession *mgo.Session) {
 	var seedUrls = []string {
 		"http://mito.hu",
-		"https://vimeo.com",
+		"https://blog.hu",
 		"http://mupa.hu",
 		"http://startlap.hu",
-		"http://www.pinterest.com",
-		"http://instagram.com",
-		"http://www.youtube.com",
-		"https://twitter.com",
+		"http://depo.hu",
+		"http://olcsobbat.hu",
+		"http://argep.hu",
+		"https://e-link.hu",
 		"http://index.hu",
 		"http://origo.hu",
 		"http://mek.oszk.hu",
